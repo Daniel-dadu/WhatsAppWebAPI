@@ -3,3 +3,8 @@
 # azure-monitor-opentelemetry
 
 azure-functions
+
+requests
+
+# Cosmos DB
+azure-cosmos
