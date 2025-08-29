@@ -11,14 +11,19 @@ Endpoints
   - `username` (string)
   - `password` (string)
 - Responses:
-  - 200: "Login successful"
+  - 200: JSON with a signed JWT access token
   - 401: "Login failed"
 
 Sample responses:
 
 Success (200):
 ```json
-"Login successful"
+{
+  "message": "Login successful",
+  "access_token": "<JWT_TOKEN_HERE>",
+  "token_type": "Bearer",
+  "expires_in": 28800
+}
 ```
 
 Failure (401):
@@ -126,12 +131,39 @@ Sample success response (200):
 
 Notes
 -----
-- Cosmos DB connection is currently hard-coded for local testing in `get_cosmos_container()`; replace with environment variables `COSMOS_CONNECTION_STRING`, `COSMOS_DB_NAME`, and `COSMOS_CONTAINER_NAME` for production.
-- The `send-agent-message` function currently uses a hard-coded chatbot URL — switch to environment configuration before deploying.
+- La conexión a Cosmos DB actualmente está configurada para pruebas locales en `get_cosmos_container()`; reemplázala por las variables de entorno `COSMOS_CONNECTION_STRING`, `COSMOS_DB_NAME` y `COSMOS_CONTAINER_NAME` para producción.
+- La función `send-agent-message` actualmente usa una URL de chatbot codificada — cámbiala por una configuración a través de variables de entorno antes de desplegar.
+- Autenticación: la Function App ahora emite un JWT al iniciar sesión con éxito. La secret del JWT debe configurarse en App Settings como `JWT_SECRET`.
 
-How to run locally
--------------------
-- Install Python requirements from `requirements.txt` into your venv.
-- Start the Functions host (VS Code task included): `func host start`.
-- Use `test.http` or curl to exercise the endpoints.
+Autenticación / notas de uso
+---------------------------
+- Tras un `POST /login` exitoso, la respuesta contiene `access_token` (un JWT). El frontend debe almacenar ese token (por ejemplo en `localStorage`) y enviarlo en las peticiones siguientes en el header `Authorization` así:
 
+```
+Authorization: Bearer <token>
+```
+
+Ejemplo de uso en cliente (browser JS):
+
+```js
+// Tras recibir la respuesta del login en `data`
+localStorage.setItem('access_token', data.access_token);
+
+// Más tarde, enviando una petición protegida
+fetch('/conversation-mode', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+    'Authorization': 'Bearer ' + localStorage.getItem('access_token')
+  },
+  body: JSON.stringify({ wa_id: 'lead_123', mode: 'agente' })
+});
+```
+
+Si el JWT falta, es inválido o ha expirado, los endpoints protegidos devolverán 401 Unauthorized.
+
+Cómo ejecutar localmente
+-----------------------
+- Instala los requisitos de Python listados en `requirements.txt` dentro de tu entorno virtual.
+- Inicia el host de Functions (hay una tarea de VS Code incluida): `func host start`.
+- Usa `test.http` o `curl` para probar los endpoints.

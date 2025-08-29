@@ -3,8 +3,9 @@ import logging
 import json
 import os
 import requests
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from azure.cosmos import CosmosClient
+import jwt
 
 app = func.FunctionApp(http_auth_level=func.AuthLevel.FUNCTION)
 
@@ -17,8 +18,34 @@ def login(req: func.HttpRequest) -> func.HttpResponse:
     """
     logging.info("login - Start")
     body = req.get_json()
-    if body.get("username") == "admin" and body.get("password") == "admin":
-        return func.HttpResponse("Login successful", status_code=200)
+    if not body:
+        return func.HttpResponse("Invalid JSON", status_code=400)
+
+    if body.get("username") == os.environ["LOGIN_USER"] and body.get("password") == os.environ["LOGIN_PASSWORD"]:
+        # Create JWT
+        secret = os.environ["JWT_SECRET"]
+        if not secret:
+            logging.error("JWT_SECRET not configured in app settings")
+            return func.HttpResponse("Server misconfiguration", status_code=500)
+
+        now = datetime.now(timezone.utc)
+        payload = {
+            "sub": body.get("username"),
+            "iat": int(now.timestamp()),
+            # token expires in 8 hours
+            "exp": int((now + timedelta(hours=8)).timestamp())
+        }
+
+        token = jwt.encode(payload, secret, algorithm="HS256")
+
+        response = {
+            "message": "Login successful",
+            "access_token": token,
+            "token_type": "Bearer",
+            "expires_in": 8 * 3600
+        }
+
+        return func.HttpResponse(json.dumps(response), status_code=200, mimetype="application/json")
     else:
         return func.HttpResponse("Login failed", status_code=401)
 
@@ -30,6 +57,11 @@ def conversation_mode(req: func.HttpRequest) -> func.HttpResponse:
     logging.info('conversation-mode endpoint called')
     
     try:
+        # Verify JWT from Authorization header
+        auth_header = req.headers.get('Authorization') or req.headers.get('authorization')
+        if not verify_bearer_token(auth_header):
+            return func.HttpResponse('Unauthorized', status_code=401)
+
         body = req.get_json()
         if not body:
             return func.HttpResponse("Invalid JSON", status_code=400)
@@ -75,6 +107,11 @@ def send_agent_message(req: func.HttpRequest) -> func.HttpResponse:
     logging.info('send-agent-message endpoint called')
     
     try:
+        # Verify JWT
+        auth_header = req.headers.get('Authorization') or req.headers.get('authorization')
+        if not verify_bearer_token(auth_header):
+            return func.HttpResponse('Unauthorized', status_code=401)
+
         body = req.get_json()
         if not body:
             return func.HttpResponse("Invalid JSON", status_code=400)
@@ -132,6 +169,11 @@ def get_conversation(req: func.HttpRequest) -> func.HttpResponse:
     logging.info('get-conversation endpoint called (POST body)')
     
     try:
+        # Verify JWT
+        auth_header = req.headers.get('Authorization') or req.headers.get('authorization')
+        if not verify_bearer_token(auth_header):
+            return func.HttpResponse('Unauthorized', status_code=401)
+
         body = req.get_json()
         if not body:
             return func.HttpResponse("Invalid JSON", status_code=400)
@@ -175,6 +217,40 @@ def get_cosmos_container():
     except Exception as e:
         logging.error(f"Error conectando a Cosmos DB: {e}")
         raise
+
+
+def extract_token_from_header(auth_header: str) -> str:
+    """Extracts the token string from an Authorization header of the form 'Bearer <token>'"""
+    if not auth_header:
+        return None
+    parts = auth_header.split()
+    if len(parts) == 2 and parts[0].lower() == 'bearer':
+        return parts[1]
+    return None
+
+
+def verify_bearer_token(auth_header: str) -> bool:
+    """Verifies the JWT using the secret in env var JWT_SECRET. Returns True if valid."""
+    token = extract_token_from_header(auth_header)
+    if not token:
+        logging.warning('No bearer token provided')
+        return False
+
+    secret = os.environ['JWT_SECRET']
+    if not secret:
+        logging.error('JWT_SECRET not configured')
+        return False
+
+    try:
+        decoded = jwt.decode(token, secret, algorithms=["HS256"])
+        logging.debug(f"JWT valid for subject: {decoded.get('sub')}")
+        return True
+    except jwt.ExpiredSignatureError:
+        logging.warning('JWT expired')
+        return False
+    except jwt.InvalidTokenError as e:
+        logging.warning(f'Invalid JWT: {e}')
+        return False
 
 def get_conversation_state(wa_id: str) -> dict:
     """
