@@ -99,10 +99,80 @@ def conversation_mode(req: func.HttpRequest) -> func.HttpResponse:
         logging.error(f"Error in conversation-mode endpoint: {e}")
         return func.HttpResponse("Internal server error", status_code=500)
 
+def get_cosmos_container():
+    """
+    Inicializa y retorna el container de Cosmos DB.
+    Usa las mismas variables de entorno que la Azure Function principal.
+    """
+    try:
+        cosmos_client = CosmosClient.from_connection_string(os.environ["COSMOS_CONNECTION_STRING"])
+        db_name = os.environ["COSMOS_DB_NAME"]
+        container_name = os.environ["COSMOS_CONTAINER_NAME"]
+
+        container = cosmos_client.get_database_client(db_name).get_container_client(container_name)
+        return container
+        
+    except Exception as e:
+        logging.error(f"Error conectando a Cosmos DB: {e}")
+        raise
+
+def save_message_in_db(wa_id: str, message: str) -> bool:
+    """
+    Guarda un mensaje en la base de datos de Cosmos DB.
+    NO guarda todo el estado de la conversación.
+    Solo guarda el mensaje actual al final de la lista de mensajes
+    """
+    try:
+        container = get_cosmos_container()
+
+        now = datetime.now(timezone.utc)
+        now_str = now.strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+        # Crear el nuevo mensaje del agente
+        new_message = {
+            "id": f"msg_{int(now.timestamp())}_1",
+            "sender": "agente",
+            "text": message,
+            "timestamp": now_str,
+            "delivered": True,
+            "read": False
+        }
+        
+        # Usar patch operations para agregar el mensaje y actualizar updated_at
+        # Esto es más eficiente que cargar todo el documento
+        patch_ops = [
+            {
+                "op": "add",
+                "path": "/messages/-",
+                "value": new_message
+            },
+            {
+                "op": "replace",
+                "path": "/updated_at",
+                "value": now_str
+            }
+        ]
+        
+        # Ejecutar patch operation
+        container.patch_item(
+            item=f"conv_{wa_id}",
+            partition_key=wa_id,
+            patch_operations=patch_ops
+        )
+        
+        logging.info(f"Mensaje de agente guardado exitosamente para wa_id: {wa_id}")
+        return True
+        
+    except Exception as e:
+        logging.error(f"Error guardando mensaje de agente en DB para wa_id {wa_id}: {e}")
+        return False
+
 @app.route(route="send-agent-message", methods=["POST"])
 def send_agent_message(req: func.HttpRequest) -> func.HttpResponse:
     """
     Envía un mensaje del agente al lead a través del chatbot Azure Function.
+    NO guarda el mensaje en la base de datos, de eso se encarga la otra Azure Function.
     """
     logging.info('send-agent-message endpoint called')
     
@@ -127,7 +197,9 @@ def send_agent_message(req: func.HttpRequest) -> func.HttpResponse:
 
         if not chatbot_url:
             return func.HttpResponse("Chatbot function URL not configured", status_code=500)
-        
+
+        save_message_in_db(wa_id, message)
+
         payload = {
             "wa_id": wa_id,
             "message": message
@@ -200,24 +272,6 @@ def get_conversation(req: func.HttpRequest) -> func.HttpResponse:
     except Exception as e:
         logging.error(f"Error in get-conversation endpoint: {e}")
         return func.HttpResponse("Internal server error", status_code=500)
-
-def get_cosmos_container():
-    """
-    Inicializa y retorna el container de Cosmos DB.
-    Usa las mismas variables de entorno que la Azure Function principal.
-    """
-    try:
-        cosmos_client = CosmosClient.from_connection_string(os.environ["COSMOS_CONNECTION_STRING"])
-        db_name = os.environ["COSMOS_DB_NAME"]
-        container_name = os.environ["COSMOS_CONTAINER_NAME"]
-
-        container = cosmos_client.get_database_client(db_name).get_container_client(container_name)
-        return container
-        
-    except Exception as e:
-        logging.error(f"Error conectando a Cosmos DB: {e}")
-        raise
-
 
 def extract_token_from_header(auth_header: str) -> str:
     """Extracts the token string from an Authorization header of the form 'Bearer <token>'"""
