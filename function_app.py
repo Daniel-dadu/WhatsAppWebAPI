@@ -128,10 +128,11 @@ def save_message_in_db(wa_id: str, message: str) -> bool:
         now = datetime.now(timezone.utc)
         now_str = now.strftime("%Y-%m-%dT%H:%M:%SZ")
 
+        message_id = f"msg_{int(now.timestamp())}_1"  # Simple ID basado en timestamp
 
         # Crear el nuevo mensaje del agente
         new_message = {
-            "id": f"msg_{int(now.timestamp())}_1",
+            "id": message_id,
             "sender": "agente",
             "text": message,
             "timestamp": now_str,
@@ -162,11 +163,11 @@ def save_message_in_db(wa_id: str, message: str) -> bool:
         )
         
         logging.info(f"Mensaje de agente guardado exitosamente para wa_id: {wa_id}")
-        return True
+        return message_id
         
     except Exception as e:
         logging.error(f"Error guardando mensaje de agente en DB para wa_id {wa_id}: {e}")
-        return False
+        return None
 
 @app.route(route="send-agent-message", methods=["POST"])
 def send_agent_message(req: func.HttpRequest) -> func.HttpResponse:
@@ -198,7 +199,7 @@ def send_agent_message(req: func.HttpRequest) -> func.HttpResponse:
         if not chatbot_url:
             return func.HttpResponse("Chatbot function URL not configured", status_code=500)
 
-        save_message_in_db(wa_id, message)
+        message_id = save_message_in_db(wa_id, message)
 
         payload = {
             "wa_id": wa_id,
@@ -216,7 +217,7 @@ def send_agent_message(req: func.HttpRequest) -> func.HttpResponse:
                 "success": True,
                 "message": "Agent message sent successfully",
                 "wa_id": wa_id,
-                "message_sent": message,
+                "message_id_sent": message_id,
                 "conversation_mode": "agente",
                 "timestamp": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
             }
@@ -442,4 +443,60 @@ def get_recent_leads(req: func.HttpRequest) -> func.HttpResponse:
 
     except Exception as e:
         logging.error(f"Error in get-recent-conversations endpoint: {e}")
+        return func.HttpResponse("Internal server error", status_code=500)
+
+@app.route(route="get-recent-messages", methods=["POST"])
+def get_recent_messages(req: func.HttpRequest) -> func.HttpResponse:
+    """
+    Devuelve los últimos mensajes de una conversación específica.
+    Endpoint usado por el polling de la aplicación.
+    Es de tipo POST para permitir el JSON body con el `wa_id` y `last_message_id`.
+    """
+    logging.info('get-recent-messages endpoint called')
+
+    try:
+        # Verify JWT
+        auth_header = req.headers.get('Authorization') or req.headers.get('authorization')
+        if not verify_bearer_token(auth_header):
+            return func.HttpResponse('Unauthorized', status_code=401)
+
+        body = req.get_json()
+        if not body:
+            return func.HttpResponse("Invalid JSON", status_code=400)
+
+        wa_id = body.get('wa_id')
+        last_message_id = body.get('last_message_id')
+        if not wa_id or not last_message_id:
+            return func.HttpResponse("Missing wa_id or last_message_id in request body", status_code=400)
+
+        container = get_cosmos_container()
+
+        conversation = container.read_item(item=f"conv_{wa_id}", partition_key=wa_id)
+
+        messages = conversation.get("messages", [])
+
+        # Filtrar mensajes nuevos
+        new_messages = []
+        if last_message_id:
+            found_last = False
+            for msg in messages:
+                if found_last:
+                    new_messages.append(msg)
+                elif msg["id"] == last_message_id:
+                    found_last = True
+        
+        response = {
+            "wa_id": wa_id,
+            "conversation_mode": conversation.get("conversation_mode"),
+            "state": {
+                "nombre": conversation.get("state", {}).get("nombre"),
+                "telefono": conversation.get("state", {}).get("telefono"),
+                "completed": conversation.get("state", {}).get("completed", False),
+            },
+            "messages": new_messages
+        }
+        return func.HttpResponse(json.dumps(response, ensure_ascii=False), status_code=200, mimetype="application/json")
+
+    except Exception as e:
+        logging.error(f"Error in get-recent-messages endpoint: {e}")
         return func.HttpResponse("Internal server error", status_code=500)

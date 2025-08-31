@@ -95,10 +95,13 @@ Sample success response (200):
   },
   "messages": [
     {
-      "from": "user",
-      "text": "Hola",
-      "ts": "2025-08-24T18:00:00Z"
-    }
+      "id": "msg_2",
+      "sender": "bot",
+      "text": "Para brindarte una atención personalizada, ¿podrías decirme tu nombre? Así podré ayudarte mejor con lo que necesitas.",
+      "timestamp": "2025-08-29T03:09:47Z",
+      "delivered": true,
+      "read": false
+    },
   ],
   "completed": false,
   "updated_at": "2025-08-24T18:15:00Z"
@@ -127,6 +130,41 @@ Sample success response (200):
     }
     ```
   - 500: Internal server error
+
+
+6) `POST /get-recent-messages`
+- Description: Devuelve los últimos mensajes de una conversación específica. Endpoint usado por el polling de la aplicación. Es de tipo POST para permitir enviar en el body JSON `wa_id` y `last_message_id`.
+- Body (JSON):
+  - `wa_id` (string) - identificador del lead (sin el prefijo `conv_`)
+  - `last_message_id` (string) - id del último mensaje que el cliente ya tiene (opcional, si se envía, la respuesta contendrá solo mensajes posteriores)
+- Responses:
+  - 200: JSON con `conversation_id`, `conversation_mode`, `state` y `messages` (solo los mensajes nuevos desde `last_message_id`)
+  - 400: Falta de parámetros o JSON inválido
+  - 401: Unauthorized (token JWT faltante, inválido o expirado)
+  - 404: Conversación no encontrada
+  - 500: Error interno del servidor
+
+Ejemplo de respuesta de éxito (200):
+```json
+{
+  "wa_id": "conv_lead_123",
+  "conversation_mode": "bot",
+  "state": {
+    "nombre": "María",
+    "telefono": "521234567890",
+    "completed": false
+  },
+  "messages": [
+    {
+      "id": "msg_1690000000_1",
+      "sender": "lead",
+      "text": "Hola otra vez",
+      "timestamp": "2025-08-28T12:40:00Z",
+      "delivered": true,
+      "read": false
+    }
+  ]
+}
 ```
 
 Notes
