@@ -372,8 +372,8 @@ def format_conversation_response(conversation_data: dict) -> dict:
     logging.info(f"conversation_data: {conversation_data}")
     state = conversation_data.get("state", {})
     
-    # Determinar nombre (nombre_completo si existe, sino nombre)
-    nombre = state.get("nombre_completo") or state.get("nombre", "")
+    # Determinar nombre
+    nombre = state.get("nombre", "")
     
     formatted_response = {
         "wa_id": conversation_data.get("lead_id"),
@@ -422,7 +422,6 @@ def get_recent_leads(req: func.HttpRequest) -> func.HttpResponse:
             # Keep only the four requested fields in the state
             trimmed_state = {
                 "nombre": raw_state.get("nombre", ""),
-                "nombre_completo": raw_state.get("nombre_completo", ""),
                 "telefono": raw_state.get("telefono", ""),
                 "completed": raw_state.get("completed", False)
             }

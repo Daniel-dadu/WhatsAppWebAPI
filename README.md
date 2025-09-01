@@ -120,8 +120,7 @@ Sample success response (200):
       "created_at": "2025-08-24T18:00:00Z",
       "updated_at": "2025-08-24T18:15:00Z",
       "state": {
-        "nombre": "María",
-        "nombre_completo": "María García López",
+        "nombre": "María Rodriguez",
         "telefono": "521234567890",
         "completed": false
       },
