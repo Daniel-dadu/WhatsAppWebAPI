@@ -74,7 +74,30 @@ Sample success response (200):
 }
 ```
 
-4) `POST /get-conversation`
+4) `GET /conversations/recent`
+- Description: Devuelve las últimas 10 conversaciones ordenadas por `updated_at` desc.
+- Responses:
+  - 200: JSON array, donde cada elemento tiene la siguiente forma:
+    ```json
+    {
+      "id": "conv_12345",
+      "lead_id": "lead_98765",
+      "canal": "whatsapp",
+      "created_at": "2025-08-24T18:00:00Z",
+      "updated_at": "2025-08-24T18:15:00Z",
+      "state": {
+        "nombre": "María Rodriguez",
+        "telefono": "521234567890",
+        "completed": false
+      },
+      "conversation_mode": "agente",
+      "asignado_asesor": "asesor_ventas_001"
+    }
+    ```
+  - 500: Internal server error
+
+
+5) `POST /get-conversation`
 - Description: Obtiene el estado completo de una conversación. Es de tipo POST y recibe `wa_id` en el body JSON.
 - Body (JSON):
   - `wa_id` (string) - identificador del lead (sin el prefijo `conv_`)
@@ -108,29 +131,6 @@ Sample success response (200):
 }
 ```
 
-5) `GET /conversations/recent`
-- Description: Devuelve las últimas 10 conversaciones ordenadas por `updated_at` desc.
-- Responses:
-  - 200: JSON array, donde cada elemento tiene la siguiente forma:
-    ```json
-    {
-      "id": "conv_12345",
-      "lead_id": "lead_98765",
-      "canal": "whatsapp",
-      "created_at": "2025-08-24T18:00:00Z",
-      "updated_at": "2025-08-24T18:15:00Z",
-      "state": {
-        "nombre": "María Rodriguez",
-        "telefono": "521234567890",
-        "completed": false
-      },
-      "conversation_mode": "agente",
-      "asignado_asesor": "asesor_ventas_001"
-    }
-    ```
-  - 500: Internal server error
-
-
 6) `POST /get-recent-messages`
 - Description: Devuelve los últimos mensajes de una conversación específica. Endpoint usado por el polling de la aplicación. Es de tipo POST para permitir enviar en el body JSON `wa_id` y `last_message_id`.
 - Body (JSON):
@@ -146,12 +146,11 @@ Sample success response (200):
 Ejemplo de respuesta de éxito (200):
 ```json
 {
-  "wa_id": "conv_lead_123",
+  "wa_id": "lead_98765",
   "conversation_mode": "bot",
-  "state": {
+  "lead_info": {
     "nombre": "María",
     "telefono": "521234567890",
-    "completed": false
   },
   "messages": [
     {
@@ -162,7 +161,9 @@ Ejemplo de respuesta de éxito (200):
       "delivered": true,
       "read": false
     }
-  ]
+  ],
+  "completed": false,
+  "updated_at": "2025-08-24T18:15:00Z"
 }
 ```
 

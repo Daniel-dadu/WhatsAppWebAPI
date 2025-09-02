@@ -233,47 +233,6 @@ def send_agent_message(req: func.HttpRequest) -> func.HttpResponse:
         logging.error(f"Error in send-agent-message endpoint: {e}")
         return func.HttpResponse("Internal server error", status_code=500)
 
-@app.route(route="get-conversation", methods=["POST"])
-def get_conversation(req: func.HttpRequest) -> func.HttpResponse:
-    """
-    Obtiene el estado completo de una conversación para mostrar en la interfaz web.
-    Ahora acepta POST con JSON body que contiene `wa_id`.
-    """
-    logging.info('get-conversation endpoint called (POST body)')
-    
-    try:
-        # Verify JWT
-        auth_header = req.headers.get('Authorization') or req.headers.get('authorization')
-        if not verify_bearer_token(auth_header):
-            return func.HttpResponse('Unauthorized', status_code=401)
-
-        body = req.get_json()
-        if not body:
-            return func.HttpResponse("Invalid JSON", status_code=400)
-
-        wa_id = body.get('wa_id')
-        if not wa_id:
-            return func.HttpResponse("Missing wa_id in request body", status_code=400)
-
-        # Obtener estado de la conversación
-        conversation_data = get_conversation_state(wa_id)
-
-        if not conversation_data:
-            return func.HttpResponse("Conversation not found", status_code=404)
-
-        # Formatear respuesta según el formato solicitado
-        formatted_response = format_conversation_response(conversation_data)
-
-        return func.HttpResponse(
-            json.dumps(formatted_response, ensure_ascii=False), 
-            status_code=200, 
-            mimetype="application/json"
-        )
-
-    except Exception as e:
-        logging.error(f"Error in get-conversation endpoint: {e}")
-        return func.HttpResponse("Internal server error", status_code=500)
-
 def extract_token_from_header(auth_header: str) -> str:
     """Extracts the token string from an Authorization header of the form 'Bearer <token>'"""
     if not auth_header:
@@ -282,7 +241,6 @@ def extract_token_from_header(auth_header: str) -> str:
     if len(parts) == 2 and parts[0].lower() == 'bearer':
         return parts[1]
     return None
-
 
 def verify_bearer_token(auth_header: str) -> bool:
     """Verifies the JWT using the secret in env var JWT_SECRET. Returns True if valid."""
@@ -365,31 +323,6 @@ def update_conversation_mode(wa_id: str, mode: str) -> bool:
             logging.error(f"Error actualizando modo de conversación: {e}")
         return False
 
-def format_conversation_response(conversation_data: dict) -> dict:
-    """
-    Formatea los datos de conversación al formato requerido.
-    """
-    logging.info(f"conversation_data: {conversation_data}")
-    state = conversation_data.get("state", {})
-    
-    # Determinar nombre
-    nombre = state.get("nombre", "")
-    
-    formatted_response = {
-        "wa_id": conversation_data.get("lead_id"),
-        "conversation_mode": conversation_data.get("conversation_mode", "bot"),
-        "lead_info": {
-            "nombre": nombre,
-            "telefono": state.get("telefono", "")
-        },
-        "messages": conversation_data.get("messages", []),
-        "completed": state.get("completed", False),
-        "updated_at": conversation_data.get("updated_at", "")
-    }
-    
-    return formatted_response
-
-
 @app.route(route="leads/recent", methods=["GET"])
 def get_recent_leads(req: func.HttpRequest) -> func.HttpResponse:
     """
@@ -444,6 +377,71 @@ def get_recent_leads(req: func.HttpRequest) -> func.HttpResponse:
         logging.error(f"Error in get-recent-conversations endpoint: {e}")
         return func.HttpResponse("Internal server error", status_code=500)
 
+def format_conversation_response(conversation_data: dict, messages: list = None) -> dict:
+    """
+    Formatea los datos de conversación al formato requerido.
+    """
+    logging.info(f"conversation_data: {conversation_data}")
+    state = conversation_data.get("state", {})
+
+    if messages is None:
+        messages = conversation_data.get("messages", [])
+    
+    formatted_response = {
+        "wa_id": conversation_data.get("lead_id"),
+        "conversation_mode": conversation_data.get("conversation_mode", "bot"),
+        "lead_info": {
+            "nombre": state.get("nombre", ""),
+            "telefono": state.get("telefono", "")
+        },
+        "messages": messages,
+        "completed": state.get("completed", False),
+        "updated_at": conversation_data.get("updated_at", "")
+    }
+    
+    return formatted_response
+
+@app.route(route="get-conversation", methods=["POST"])
+def get_conversation(req: func.HttpRequest) -> func.HttpResponse:
+    """
+    Obtiene el estado completo de una conversación para mostrar en la interfaz web.
+    Ahora acepta POST con JSON body que contiene `wa_id`.
+    """
+    logging.info('get-conversation endpoint called (POST body)')
+    
+    try:
+        # Verify JWT
+        auth_header = req.headers.get('Authorization') or req.headers.get('authorization')
+        if not verify_bearer_token(auth_header):
+            return func.HttpResponse('Unauthorized', status_code=401)
+
+        body = req.get_json()
+        if not body:
+            return func.HttpResponse("Invalid JSON", status_code=400)
+
+        wa_id = body.get('wa_id')
+        if not wa_id:
+            return func.HttpResponse("Missing wa_id in request body", status_code=400)
+
+        # Obtener estado de la conversación
+        conversation_data = get_conversation_state(wa_id)
+
+        if not conversation_data:
+            return func.HttpResponse("Conversation not found", status_code=404)
+
+        # Formatear respuesta según el formato solicitado
+        formatted_response = format_conversation_response(conversation_data)
+
+        return func.HttpResponse(
+            json.dumps(formatted_response, ensure_ascii=False), 
+            status_code=200, 
+            mimetype="application/json"
+        )
+
+    except Exception as e:
+        logging.error(f"Error in get-conversation endpoint: {e}")
+        return func.HttpResponse("Internal server error", status_code=500)
+
 @app.route(route="get-recent-messages", methods=["POST"])
 def get_recent_messages(req: func.HttpRequest) -> func.HttpResponse:
     """
@@ -484,16 +482,8 @@ def get_recent_messages(req: func.HttpRequest) -> func.HttpResponse:
                 elif msg["id"] == last_message_id:
                     found_last = True
         
-        response = {
-            "wa_id": wa_id,
-            "conversation_mode": conversation.get("conversation_mode"),
-            "state": {
-                "nombre": conversation.get("state", {}).get("nombre"),
-                "telefono": conversation.get("state", {}).get("telefono"),
-                "completed": conversation.get("state", {}).get("completed", False),
-            },
-            "messages": new_messages
-        }
+        response = format_conversation_response(conversation, new_messages)
+
         return func.HttpResponse(json.dumps(response, ensure_ascii=False), status_code=200, mimetype="application/json")
 
     except Exception as e:
