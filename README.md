@@ -77,22 +77,24 @@ Sample success response (200):
 4) `GET /conversations/recent`
 - Description: Devuelve las últimas 10 conversaciones ordenadas por `updated_at` desc.
 - Responses:
-  - 200: JSON array, donde cada elemento tiene la siguiente forma:
+  - 200: JSON array con una estructura como esta:
     ```json
-    {
-      "id": "conv_12345",
-      "lead_id": "lead_98765",
-      "canal": "whatsapp",
-      "created_at": "2025-08-24T18:00:00Z",
-      "updated_at": "2025-08-24T18:15:00Z",
-      "state": {
-        "nombre": "María Rodriguez",
-        "telefono": "521234567890",
-        "completed": false
-      },
-      "conversation_mode": "agente",
-      "asignado_asesor": "asesor_ventas_001"
-    }
+    [
+      {
+        "id": "conv_12345",
+        "lead_id": "lead_98765",
+        "canal": "whatsapp",
+        "created_at": "2025-08-24T18:00:00Z",
+        "updated_at": "2025-08-24T18:15:00Z",
+        "state": {
+          "nombre": "María Rodriguez",
+          "telefono": "521234567890",
+          "completed": false
+        },
+        "conversation_mode": "agente",
+        "asignado_asesor": "asesor_ventas_001"
+      }
+    ]
     ```
   - 500: Internal server error
 
