@@ -116,7 +116,7 @@ def get_cosmos_container():
         logging.error(f"Error conectando a Cosmos DB: {e}")
         raise
 
-def save_message_in_db(wa_id: str, message: str) -> bool:
+def save_message_in_db(wa_id: str, message: str, whatsapp_message_id: str) -> bool:
     """
     Guarda un mensaje en la base de datos de Cosmos DB.
     NO guarda todo el estado de la conversación.
@@ -133,6 +133,7 @@ def save_message_in_db(wa_id: str, message: str) -> bool:
         # Crear el nuevo mensaje del agente
         new_message = {
             "id": message_id,
+            "whatsapp_message_id": whatsapp_message_id,
             "sender": "agente",
             "text": message,
             "timestamp": now_str,
@@ -199,20 +200,24 @@ def send_agent_message(req: func.HttpRequest) -> func.HttpResponse:
         if not chatbot_url:
             return func.HttpResponse("Chatbot function URL not configured", status_code=500)
 
-        message_id = save_message_in_db(wa_id, message)
-
-        payload = {
-            "wa_id": wa_id,
-            "message": message
-        }
-        
+        logging.info(f"Sending agent message to chatbot function: {chatbot_url}")
         response = requests.post(
             chatbot_url,
-            json=payload,
+            json={
+                "wa_id": wa_id,
+                "message": message
+            },
             timeout=30
         )
         
-        if response.status_code == 200:
+        logging.info(f"Response from chatbot function: {response.text}")
+        if response.status_code == 200:            
+            # Acceder al valor de whatsapp_message_id
+            whatsapp_message_id = response.text
+
+            # Guardar el mensaje en la base de datos
+            message_id = save_message_in_db(wa_id, message, whatsapp_message_id)
+
             response_data = {
                 "success": True,
                 "message": "Agent message sent successfully",
@@ -221,6 +226,7 @@ def send_agent_message(req: func.HttpRequest) -> func.HttpResponse:
                 "conversation_mode": "agente",
                 "timestamp": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
             }
+
             return func.HttpResponse(json.dumps(response_data), status_code=200, mimetype="application/json")
         else:
             logging.error(f"Chatbot function returned error: {response.status_code} - {response.text}")
