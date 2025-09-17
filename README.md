@@ -1,6 +1,6 @@
 # Azure Function - Web API WhatsApp
 
-This Azure Function app exposes several HTTP endpoints used by the chatbot system.
+Esta Azure Function expone varios endpoints HTTP utilizados por una plataforma web para monitorear y manipular un chatbot.
 
 Variables de entorno
 ---------
@@ -24,7 +24,7 @@ Endpoints
 ---------
 
 1) `POST /login`
-- Description: Simple login endpoint for testing.
+- Description: Endpoint de login.
 - Body (JSON):
   - `username` (string)
   - `password` (string)
@@ -233,12 +233,6 @@ Sample success response (200):
   "has_more": true
 }
 ```
-
-Notes
------
-- La conexión a Cosmos DB actualmente está configurada para pruebas locales en `get_cosmos_container()`; reemplázala por las variables de entorno `COSMOS_CONNECTION_STRING`, `COSMOS_DB_NAME` y `COSMOS_CONTAINER_NAME` para producción.
-- La función `send-agent-message` actualmente usa una URL de chatbot codificada — cámbiala por una configuración a través de variables de entorno antes de desplegar.
-- Autenticación: la Function App ahora emite un JWT al iniciar sesión con éxito. La secret del JWT debe configurarse en App Settings como `JWT_SECRET`.
 
 Autenticación / notas de uso
 ---------------------------
