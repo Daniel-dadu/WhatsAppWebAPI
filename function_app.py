@@ -340,9 +340,9 @@ def get_recent_leads(req: func.HttpRequest) -> func.HttpResponse:
     try:
         container = get_cosmos_container()
 
-        # Query para obtener las últimas 10 conversaciones por updated_at descendente
+        # Query para obtener las últimas 11 conversaciones por updated_at descendente
         query = (
-            "SELECT TOP 10 c.id, c.lead_id, c.canal, c.created_at, c.updated_at, "
+            "SELECT TOP 11 c.id, c.lead_id, c.canal, c.created_at, c.updated_at, "
             "c.state, c.conversation_mode, c.asignado_asesor FROM c ORDER BY c.updated_at DESC"
         )
 
@@ -353,6 +353,14 @@ def get_recent_leads(req: func.HttpRequest) -> func.HttpResponse:
 
         # materializar resultados en lista
         items = list(items_iterable)
+
+        # Verificar si hay más conversaciones
+        has_more = False
+        if len(items) == 11:
+            has_more = True
+
+        # Tomar solo las primeras 10 conversaciones
+        items = items[:10]
 
         # Asegurar que cada item tenga las claves esperadas y formatear si es necesario
         results = []
@@ -377,7 +385,12 @@ def get_recent_leads(req: func.HttpRequest) -> func.HttpResponse:
             }
             results.append(formatted)
 
-        return func.HttpResponse(json.dumps(results, ensure_ascii=False), status_code=200, mimetype="application/json")
+        response_data = {
+            "conversations": results,
+            "has_more": has_more
+        }
+
+        return func.HttpResponse(json.dumps(response_data, ensure_ascii=False), status_code=200, mimetype="application/json")
 
     except Exception as e:
         logging.error(f"Error in get-recent-conversations endpoint: {e}")
@@ -523,7 +536,7 @@ def next_conversations(req: func.HttpRequest) -> func.HttpResponse:
         # Si no hay IDs proporcionados, devolver las primeras 10 conversaciones
         if len(conversation_ids) == 0:
             query = (
-                "SELECT TOP 10 c.id, c.lead_id, c.canal, c.created_at, c.updated_at, "
+                "SELECT TOP 11 c.id, c.lead_id, c.canal, c.created_at, c.updated_at, "
                 "c.state, c.conversation_mode, c.asignado_asesor FROM c ORDER BY c.updated_at DESC"
             )
         else:
@@ -541,7 +554,7 @@ def next_conversations(req: func.HttpRequest) -> func.HttpResponse:
             if not ids_results:
                 # Si no se encuentran los IDs, devolver las primeras 10 conversaciones
                 query = (
-                    "SELECT TOP 10 c.id, c.lead_id, c.canal, c.created_at, c.updated_at, "
+                    "SELECT TOP 11 c.id, c.lead_id, c.canal, c.created_at, c.updated_at, "
                     "c.state, c.conversation_mode, c.asignado_asesor FROM c ORDER BY c.updated_at DESC"
                 )
             else:
@@ -550,7 +563,7 @@ def next_conversations(req: func.HttpRequest) -> func.HttpResponse:
                 
                 # Luego obtenemos las siguientes 10 conversaciones después de esa fecha
                 query = (
-                    "SELECT TOP 10 c.id, c.lead_id, c.canal, c.created_at, c.updated_at, "
+                    "SELECT TOP 11 c.id, c.lead_id, c.canal, c.created_at, c.updated_at, "
                     "c.state, c.conversation_mode, c.asignado_asesor FROM c "
                     f"WHERE c.updated_at < '{last_updated_at}' "
                     "ORDER BY c.updated_at DESC"
@@ -567,6 +580,14 @@ def next_conversations(req: func.HttpRequest) -> func.HttpResponse:
 
         # Materializar resultados en lista
         items = list(items_iterable)
+
+        # Verificar si hay más conversaciones
+        has_more = False
+        if len(items) == 11:
+            has_more = True
+
+        # Tomar solo las primeras 10 conversaciones
+        items = items[:10]
 
         # Formatear resultados según el formato requerido
         results = []
@@ -593,8 +614,7 @@ def next_conversations(req: func.HttpRequest) -> func.HttpResponse:
 
         response_data = {
             "conversations": results,
-            "count": len(results),
-            "timestamp": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+            "has_more": has_more
         }
 
         return func.HttpResponse(
