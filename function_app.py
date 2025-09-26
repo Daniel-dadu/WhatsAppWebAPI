@@ -631,3 +631,83 @@ def next_conversations(req: func.HttpRequest) -> func.HttpResponse:
     except Exception as e:
         logging.error(f"Error in next-conversations endpoint: {e}")
         return func.HttpResponse("Internal server error", status_code=500)
+
+@app.route(route="get-multimedia-whatsapp", methods=["GET"])
+def get_multimedia_whatsapp(req: func.HttpRequest) -> func.HttpResponse:
+    """
+    Obtiene archivos multimedia de WhatsApp usando el multimedia_id.
+    Hace dos llamadas a la API de WhatsApp:
+    1. Obtiene la información del multimedia (URL, mime_type, etc.)
+    2. Descarga el archivo multimedia usando la URL obtenida
+    """
+    logging.info('get-multimedia-whatsapp endpoint called')
+    
+    try:
+        # Verify JWT
+        auth_header = req.headers.get('Authorization') or req.headers.get('authorization')
+        # TODO: Mejorar este check con URLs Firmadas (Signed URLs)
+        if not auth_header:
+            logging.warning('No bearer token provided')
+            # return func.HttpResponse('Unauthorized', status_code=401)
+
+        # Get multimedia_id from query parameters
+        multimedia_id = req.params.get('id')
+        if not multimedia_id:
+            return func.HttpResponse("Missing id query parameter", status_code=400)
+
+        # Get WhatsApp access token from environment
+        whatsapp_token = os.environ['WHATSAPP_ACCESS_TOKEN']
+        if not whatsapp_token:
+            logging.error("WHATSAPP_ACCESS_TOKEN not configured in app settings")
+            return func.HttpResponse("Server misconfiguration", status_code=500)
+
+        # First API call: Get multimedia information
+        media_info_url = f"https://graph.facebook.com/v23.0/{multimedia_id}"
+        headers = {
+            'Authorization': f'Bearer {whatsapp_token}'
+        }
+        
+        logging.info(f"Fetching media info from: {media_info_url}")
+        media_info_response = requests.get(media_info_url, headers=headers, timeout=30)
+        
+        if media_info_response.status_code != 200:
+            logging.error(f"Failed to get media info: {media_info_response.status_code} - {media_info_response.text}")
+            return func.HttpResponse("Failed to get multimedia information from WhatsApp API", status_code=500)
+        
+        media_info = media_info_response.json()
+        logging.info(f"Media info received: {media_info}")
+        
+        # Extract the download URL from the response
+        download_url = media_info.get('url')
+        if not download_url:
+            logging.error("No download URL found in media info response")
+            return func.HttpResponse("Invalid multimedia information from WhatsApp API", status_code=500)
+        
+        # Second API call: Download the actual multimedia file
+        logging.info(f"Downloading multimedia file from: {download_url}")
+        file_response = requests.get(download_url, headers=headers, timeout=60)
+        
+        if file_response.status_code != 200:
+            logging.error(f"Failed to download file: {file_response.status_code} - {file_response.text}")
+            return func.HttpResponse("Failed to download multimedia file from WhatsApp API", status_code=500)
+        
+        # Get mime type from media info or content-type header
+        mime_type = media_info.get('mime_type') or file_response.headers.get('content-type', 'application/octet-stream')
+        
+        # Return the file with appropriate headers
+        return func.HttpResponse(
+            file_response.content,
+            status_code=200,
+            mimetype=mime_type,
+            headers={
+                'Content-Disposition': f'attachment; filename="whatsapp_media_{multimedia_id}"',
+                'Content-Length': str(len(file_response.content))
+            }
+        )
+        
+    except requests.RequestException as e:
+        logging.error(f"Error calling WhatsApp API: {e}")
+        return func.HttpResponse("Error communicating with WhatsApp API", status_code=500)
+    except Exception as e:
+        logging.error(f"Error in get-multimedia-whatsapp endpoint: {e}")
+        return func.HttpResponse("Internal server error", status_code=500)
