@@ -116,7 +116,7 @@ def get_cosmos_container():
         logging.error(f"Error conectando a Cosmos DB: {e}")
         raise
 
-def save_message_in_db(wa_id: str, message: str, whatsapp_message_id: str) -> bool:
+def save_message_in_db(wa_id: str, message: str, whatsapp_message_id: str, multimedia: str = None) -> bool:
     """
     Guarda un mensaje en la base de datos de Cosmos DB.
     NO guarda todo el estado de la conversación.
@@ -138,7 +138,8 @@ def save_message_in_db(wa_id: str, message: str, whatsapp_message_id: str) -> bo
             "text": message,
             "timestamp": now_str,
             "delivered": True,
-            "read": False
+            "read": False,
+            "multimedia": multimedia
         }
         
         # Usar patch operations para agregar el mensaje y actualizar updated_at
@@ -190,9 +191,12 @@ def send_agent_message(req: func.HttpRequest) -> func.HttpResponse:
         
         wa_id = body.get("wa_id")
         message = body.get("message")
-        
-        if not wa_id or not message:
-            return func.HttpResponse("Missing wa_id or message", status_code=400)
+
+        # Check if has "multimedia"
+        multimedia = body.get("multimedia")
+
+        if not wa_id:
+            return func.HttpResponse("Missing wa_id", status_code=400)
         
         # Llamar al endpoint agent-message del chatbot Azure Function
         chatbot_url = os.environ["AIBOT_FUNCTION_URL"]
@@ -200,23 +204,27 @@ def send_agent_message(req: func.HttpRequest) -> func.HttpResponse:
         if not chatbot_url:
             return func.HttpResponse("Chatbot function URL not configured", status_code=500)
 
-        logging.info(f"Sending agent message to chatbot function: {chatbot_url}")
+        payload = {
+            "wa_id": wa_id,
+            "message": message
+        }
+        if multimedia:
+            payload["multimedia"] = multimedia
+
+        logging.info(f"Payload: {payload}")
         response = requests.post(
             chatbot_url,
-            json={
-                "wa_id": wa_id,
-                "message": message
-            },
+            json=payload,
             timeout=30
         )
         
         logging.info(f"Response from chatbot function: {response.text}")
-        if response.status_code == 200:            
+        if response.status_code == 200:     
             # Acceder al valor de whatsapp_message_id
             whatsapp_message_id = response.text
 
             # Guardar el mensaje en la base de datos
-            message_id = save_message_in_db(wa_id, message, whatsapp_message_id)
+            message_id = save_message_in_db(wa_id, message, whatsapp_message_id, multimedia)
 
             response_data = {
                 "success": True,
