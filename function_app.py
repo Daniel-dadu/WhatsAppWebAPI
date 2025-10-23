@@ -80,11 +80,26 @@ def conversation_mode(req: func.HttpRequest) -> func.HttpResponse:
         if not current_conversation:
             return func.HttpResponse("Conversation not found", status_code=404)
         
-        # Actualizar modo via Cosmos DB (aquí deberías implementar la conexión directa)
-        # Por ahora simulamos el éxito
+        # Actualizar modo via Cosmos DB
         success = update_conversation_mode(wa_id, mode)
-        
+
         if success:
+
+            if mode == "bot":
+                startbot_url = os.environ["STARTBOT_FUNCTION_URL"]
+
+                if not startbot_url:
+                    return func.HttpResponse("Startbot function URL not configured", status_code=500)
+
+                response = requests.post(startbot_url, json={
+                    "wa_id": wa_id
+                })
+                
+                if response.status_code != 200:
+                    return func.HttpResponse("Failed to start bot", status_code=500)
+
+                logging.info(f"Bot started successfully for wa_id: {wa_id}")
+
             response_data = {
                 "success": True,
                 "message": "Conversation mode updated successfully",
