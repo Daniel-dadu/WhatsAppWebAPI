@@ -175,7 +175,8 @@ def save_message_in_db(wa_id: str, message: str, whatsapp_message_id: str, multi
 def send_agent_message(req: func.HttpRequest) -> func.HttpResponse:
     """
     Envía un mensaje del agente al lead a través del chatbot Azure Function.
-    NO guarda el mensaje en la base de datos, de eso se encarga la otra Azure Function.
+    Guarda el mensaje en la base de datos.
+    También se puede usar para enviar un mensaje de plantilla de WhatsApp, pasando el "template_name".
     """
     logging.info('send-agent-message endpoint called')
     
@@ -191,6 +192,9 @@ def send_agent_message(req: func.HttpRequest) -> func.HttpResponse:
         
         wa_id = body.get("wa_id")
         message = body.get("message")
+
+        # Check if has "template_name"
+        template_name = body.get("template_name")
 
         # Check if has "multimedia"
         multimedia = body.get("multimedia")
@@ -210,6 +214,8 @@ def send_agent_message(req: func.HttpRequest) -> func.HttpResponse:
         }
         if multimedia:
             payload["multimedia"] = multimedia
+        elif template_name:
+            payload["template_name"] = template_name
 
         logging.info(f"Payload: {payload}")
         response = requests.post(
@@ -219,16 +225,22 @@ def send_agent_message(req: func.HttpRequest) -> func.HttpResponse:
         )
         
         logging.info(f"Response from chatbot function: {response.text}")
-        if response.status_code == 200:     
+        if response.status_code == 200:
             # Acceder al valor de whatsapp_message_id
             whatsapp_message_id = response.text
 
+            message_id = None
+
+            # Los mensajes de plantilla tienen el formato: whatsapp_message_id___message
+            if template_name:
+                whatsapp_message_id, message = whatsapp_message_id.split("___")
+                message = "PLANTILLA: " + message
             # Guardar el mensaje en la base de datos
             message_id = save_message_in_db(wa_id, message, whatsapp_message_id, multimedia)
 
             response_data = {
                 "success": True,
-                "message": "Agent message sent successfully",
+                "message": message,
                 "wa_id": wa_id,
                 "message_id_sent": message_id,
                 "conversation_mode": "agente",
